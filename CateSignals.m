@@ -1,156 +1,228 @@
+function CateSignals(varargin)
 %
-% READ ALL TXT FILES
+% CateSignals
 %
 % INPUTS:
-% FolderDir = dirección del folder a analizar
-%   Los archiovs txt deben ser matrices donde cada columna representa una dirección.
+%   WorkingFolder = dirección del folder a analizar
+%       Los archiovs txt deben ser matrices donde cada columna representa
+%       una dirección.
 %
 % OUTPUTS:
 %
-% %%%%%%%%%%%%%%%%%%
-% %%% Mateo G.H. %%%
-% %%% 2021/03/17 %%%
-% %%%%%%%%%%%%%%%%%%
-
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-%                               %
-% Folder:               Level 0 %
-% 	- Folder:           Level 1 %
-%      	- Folder:       Level 2 %
-%      		- Folder    Level 3 %
-%                               %
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-
-clc, clearvars, close all;
-%% INPUT
-%%% -----------------------------------------------------------------------
-%FolderDir = 'C:\Users\Usuario\Desktop\2021 - 05- 05 - ID Verde\2020-11\02';
-FolderDir = '\\idviaserver\IDVIA_TRANSP\Personales\[02] DPTO. ESTRUCTURAS\[01] EQUIPO\JOSE MARIA ALBALADEJO\DesafiosMOP\6Registros\Verde';
-Channels  = 1:3;
-Scale     = 1/981;
-TextFileFormat     = 'csv';
-SkipFirstRAndLastC = 1;
-DirectoryLevels    = 2;
-SaveFigures        = 1;
-IncludeInFileName  = 'A';
-Fs = 50; % Hz, Sample frequency. If not, then [].
-Fr = 5; % Hz, Resample frequency. If not, then [].
-%%% Global options
-% 'None': do not check,'Any': at least one channel must check,'All': all channels must check
-GlobalCheckP25_P75 = 'All';
-%% PROCESSING
-%%% -----------------------------------------------------------------------
-%%% Create Global
-Global.FileName    = cell(0); % Column cell, each row is a file
-Global.RFall       = cell(0); % Matrix cell, each row is a file, each column is a channel
-Global.RFp50       = []; % Matrix, each row is a file, each column is a channel
-Global.RFmax       = []; % Matrix, each row is a file, each column is a channel
-Global.Wndws       = cell(0); % Matrix cell, each row is a file, each column is a channel
-Global.ResampleSig = cell(0); % Matrix cell, each row is a file, each column is a channel
-%%% Check current dir
-FolderDirOrig = FolderDir;
-CurrentDir = pwd;
+% Created By:
+%   Mateo G. H.	(2021/03/17)
+%
+% Modified By:
+%   Jose M. A.	(2021/05/24)
+%   Mateo G. H. (2021/05/26)
+global WorkingFolder Count_Folder CateSignals_Results Signals
+%%%%%%%%%%%%%%%%%%%%% -----------------------------------------------------
+%%% Assign Inputs %%%
+%%%%%%%%%%%%%%%%%%%%%
+%%% Search options --------------------------------------------------------
+SearchOpt         = varargin{1};
+WorkingFolder     = SearchOpt.Folder;
+TextFileFormat    = SearchOpt.TextFileFormat;
+DirectoryLevels   = SearchOpt.DirectoryLevels;
+IncludeInFileName = SearchOpt.IncludeInFileName;
+%%% Signal properties -----------------------------------------------------
+SignalProp = varargin{2};
+Channels   = SignalProp.Channels;
+Scale      = SignalProp.Scale;
+Fs         = SignalProp.Fs;
+%%% Signal processing -----------------------------------------------------
+SignalProc = varargin{3};
+%%% Report properties -----------------------------------------------------
+ReportProp      = varargin{4};
+SaveFigures     = ReportProp.SaveFigures;
+GenerateReport  = ReportProp.GenerateReport;
+Report_PDF_HTML = ReportProp.Style;
+%%% Dismiss Files Options -------------------------------------------------
+DismFiles = varargin{5};
+%%% Waitbar ---------------------------------------------------------------
+WaitBarLogical = logical(varargin{6});
+%%%%%%%%%%%%%%%%%%%%%%%%%%% -----------------------------------------------
+%%% Get Working Folders %%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%
+MainWorkingFolder = WorkingFolder;
+MainFolder = pwd;
 if DirectoryLevels > 0
     %%% Check current dir and all subdirectories
-    FolderDirOrigLength = length(FolderDirOrig);
-    cd(FolderDir);
+    FolderDirOrigLength = length(MainWorkingFolder);
+    cd(WorkingFolder);
     DirByLevel = dir('**/*');
-    cd(CurrentDir);
+    cd(MainFolder);
     DirByLevel = DirByLevel(~ismember({DirByLevel.name},{'.','..'}));
     %%% Get IsDir vector of logicals
     IsDirByLevel = cell2mat({DirByLevel.isdir}');
     DirByLevelFolder = {DirByLevel.folder};
     DirByLevelName   = {DirByLevel.name};
     FolderNames      = strcat(DirByLevelFolder(:),'\',DirByLevelName(:));
-    FolderDir = (FolderNames(IsDirByLevel));
+    WorkingFolder = (FolderNames(IsDirByLevel));
     FolderDirLevels = ...
-        cell2mat(cellfun(@(CellHandle) sum(ismember(CellHandle(FolderDirOrigLength:end),'\')),FolderDir,'uni',false));
-    FolderDir = FolderDir(FolderDirLevels==DirectoryLevels);
+        cell2mat(cellfun(@(CellHandle) sum(ismember(CellHandle(FolderDirOrigLength:end),'\')),WorkingFolder,'uni',false));
+    WorkingFolder = WorkingFolder(FolderDirLevels==DirectoryLevels);
 else
-    FolderDir = {FolderDir};
+    WorkingFolder = {WorkingFolder};
 end
-CATE = cell(length(FolderDir),1); % return
-for ii = 1:length(FolderDir)
-    CATE{ii} = CateAllFiles(FolderDir{ii},Channels,Scale,Fs,Fr,...
-        TextFileFormat,SkipFirstRAndLastC,SaveFigures,IncludeInFileName);
-    %%% Organize CATE on Global
-    LengthChann = length(CATE{ii}.Channel);
-    LengthFiles = length(CATE{ii}.Files.Directory);
-    Global.ResampleSig(end+1:end+LengthFiles,:) = cell(LengthFiles,LengthChann);
+NumFolderDir = length(WorkingFolder);
+%%%%%%%%%%%%%%% -----------------------------------------------------------
+%%% Waitbar %%%
+%%%%%%%%%%%%%%%
+if WaitBarLogical
+    WaitBar = WaitBarFcn([]);
+end
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% ------------------------------------------
+%%% Cate. Each WorkingFolder %%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+for Count_Folder = 1:NumFolderDir
+    %%%%%%%%%%%%%%% -------------------------------------------------------
+    %%% Waitbar %%%
+    %%%%%%%%%%%%%%%
+    if WaitBarLogical
+        WaitBar.CurrFolderDir = Count_Folder;
+        WaitBar.NumFolderDir = NumFolderDir;
+    else
+        WaitBar = [];
+    end
+    %%%%%%%%%%%%%%%%%%%% --------------------------------------------------
+    %%% CateAllFiles %%%
+    %%%%%%%%%%%%%%%%%%%%
+    CATE = CateAllFiles(WorkingFolder{Count_Folder},Channels,Scale,Fs,...
+        TextFileFormat,SaveFigures,IncludeInFileName,SignalProc,WaitBar);
+    %%% Create New Global -------------------------------------------------
+    Global = CreateNewGlobal();
+    %%% Organize CATE on Global -------------------------------------------
+    LengthChann = length(CATE.Channel);
+    LengthFiles = length(CATE.Files.Directory);
+    Global.Signal(end+1:end+LengthFiles,:) = cell(LengthFiles,LengthChann);
     Global.RFall(end+1:end+LengthFiles,:) = cell(LengthFiles,LengthChann);
     Global.Wndws(end+1:end+LengthFiles,:) = cell(LengthFiles,LengthChann);
     Global.RFmax(end+1:end+LengthFiles,:) = zeros(LengthFiles,LengthChann);
     Global.RFp50(end+1:end+LengthFiles,:) = zeros(LengthFiles,LengthChann);
+    Global.DismissByProcessing(end+1:end+LengthFiles,:) = CATE.DismissByProcessing;
     %%%
-    Global.FileName(end+1:end+LengthFiles,1) = strcat((CATE{ii}.Files.Directory),'\',(CATE{ii}.Files.Name));
+    Global.FileName(end+1:end+LengthFiles,1) = strcat((CATE.Files.Directory),'\',(CATE.Files.Name));
     for ii_chan = 1:LengthChann
         %%%
-        Global.ResampleSig(end-LengthFiles+1:end,ii_chan) = CATE{ii}.Channel{ii_chan}.ResampleSig(:);
-        Global.RFall(end-LengthFiles+1:end,ii_chan) = CATE{ii}.Channel{ii_chan}.RF(:);
-        Global.Wndws(end-LengthFiles+1:end,ii_chan) = CATE{ii}.Channel{ii_chan}.Wndws(:);
+        Global.Signal(end-LengthFiles+1:end,ii_chan) = CATE.Channel{ii_chan}.Signal(:);
+        Global.RFall(end-LengthFiles+1:end,ii_chan) = CATE.Channel{ii_chan}.RF(:);
+        Global.Wndws(end-LengthFiles+1:end,ii_chan) = CATE.Channel{ii_chan}.Wndws(:);
         %%%
         Global.RFmax(end-LengthFiles+1:end,ii_chan) = ...
-            cell2mat(cellfun(@(CellHandle) max([max(CellHandle),0]),CATE{ii}.Channel{ii_chan}.RF(:),'uni',false));
+            cell2mat(cellfun(@(CellHandle) max([max(CellHandle),0]),CATE.Channel{ii_chan}.RF(:),'uni',false));
         %%%
         Global.RFp50(end-LengthFiles+1:end,ii_chan) = ...
-            cell2mat(cellfun(@(CellHandle) prctile(CellHandle,50),CATE{ii}.Channel{ii_chan}.RF(:),'uni',false));
+            cell2mat(cellfun(@(CellHandle) prctile(CellHandle,50),CATE.Channel{ii_chan}.RF(:),'uni',false));
     end
-end
-%%% -----------------------------------------------------------------------
-%%% Return to Original Folder
-cd(FolderDirOrig)
-save('Global.mat','Global')
-%% Dismiss Files
-%%% -----------------------------------------------------------------------
-% clear('Global');load('Global.mat');
-%%% NAA: 'None','Any','All'
-DismFiles.P50gt0.NAA      = 'All';
-DismFiles.P25_P75.NAA     = 'All';
-DismFiles.MaxP50.NAA      = 'Any';
-DismFiles.MaxP50.Treshold = 1.20;
-%%% -----------------------------------------------------------------------
-[Global.NFiles, Global.NChan] = size(Global.RFp50); 
-% DismissThisFiles = false(Global.NFiles,1);
-%%% P50gt0
-if ~strcmp(DismFiles.P50gt0.NAA,'None')
-DismissThisFiles = any(Global.RFp50==0,2);
-Global = CleanGlobal(Global,DismissThisFiles,'P50gt0');
-end
-%%% P25_P75
-if ~strcmp(DismFiles.P25_P75.NAA,'None')
-    GlobalP25 = prctile(Global.RFp50,25);
-    GlobalP75 = prctile(Global.RFp50,75);
-    switch DismFiles.P25_P75.NAA
-        case 'Any'
-            DismissThisFiles = ~any(Global.RFp50>GlobalP25 & Global.RFp50<GlobalP75,2);
-        case 'All'
-            DismissThisFiles = ~all(Global.RFp50>GlobalP25 & Global.RFp50<GlobalP75,2);
+    %%%%%%%%%%%%%%%%%%%%% -------------------------------------------------
+    %%% Dismiss Files %%%
+    %%%%%%%%%%%%%%%%%%%%%
+    %%% Not processed data and less than five minutes files are eliminated
+    Global = CleanGlobal(Global,logical(Global.DismissByProcessing),'Processing');
+    %%%
+    [Global.NFiles, Global.NChan] = size(Global.RFp50);
+    %%% P50gt0
+    if ~strcmp(DismFiles.P50gt0.NAA,'None')
+        switch DismFiles.P50gt0.NAA
+            case 'Any'
+                DismissThisFiles = any(Global.RFp50==0,2);
+            case 'All'
+                DismissThisFiles = all(Global.RFp50==0,2);
+        end
+        Global = CleanGlobal(Global,DismissThisFiles,'P50gt0');
     end
-    Global = CleanGlobal(Global,DismissThisFiles,'P25P75');
-end
-%%% MaxP50
-if ~strcmp(DismFiles.MaxP50.NAA,'None')
-    switch DismFiles.MaxP50.NAA
-        case 'Any'
-            DismissThisFiles = ~any(Global.RFmax./Global.RFp50>DismFiles.MaxP50.Treshold,2);
-        case 'All'
-            DismissThisFiles = ~all(Global.RFmax./Global.RFp50>DismFiles.MaxP50.Treshold,2);
+    %%% P25_P75
+    if ~strcmp(DismFiles.P25_P75.NAA,'None')
+        GlobalP25 = prctile(Global.RFp50,25);
+        GlobalP75 = prctile(Global.RFp50,75);
+        switch DismFiles.P25_P75.NAA
+            case 'Any'
+                DismissThisFiles = ~any(Global.RFp50>GlobalP25 & Global.RFp50<GlobalP75,2);
+            case 'All'
+                DismissThisFiles = ~all(Global.RFp50>GlobalP25 & Global.RFp50<GlobalP75,2);
+        end
+        Global = CleanGlobal(Global,DismissThisFiles,'P25P75');
     end
-    Global = CleanGlobal(Global,DismissThisFiles,'MaxP50');
+    %%% MaxP50
+    if Global.NFiles>0
+        DismFiles.MaxP50.Number = ceil(0.01+4*log10(Global.NFiles));
+    else
+        DismFiles.MaxP50.Number = 0;
+    end
+    if ~strcmp(DismFiles.MaxP50.NAA,'None')
+        KeepThisFiles = false(Global.NFiles,Global.NChan);
+        GlobalRatio = Global.RFmax./Global.RFp50;
+        [~,BestFiles] = sort(GlobalRatio,1,'descend');
+        BestFiles = BestFiles(1:DismFiles.MaxP50.Number,:);
+        if ~isempty(DismFiles.MaxP50.Channels)
+            BestFiles = BestFiles(:,DismFiles.MaxP50.Channels);
+        end
+        BestFiles = unique(BestFiles);
+        KeepThisFiles(BestFiles,:) = true;
+        DismissThisFiles = ~any(KeepThisFiles,2);
+        Global = CleanGlobal(Global,DismissThisFiles,'MaxP50');
+    end
+    %%%%%%%%%%%%%%%%%%%%%% ------------------------------------------------
+    %%% Export Results %%%
+    %%%%%%%%%%%%%%%%%%%%%%
+    if Global.NFiles~=0 % At least one file meet the given criteria
+        %%% Save global and plot
+        cd(WorkingFolder{Count_Folder})
+        try
+            CateSignals_Results = rmfield(Global,'Signal');
+            Signals = Global.Signal;
+        catch
+        end
+        save('CateSignals_Results.mat','Global')
+        for Channel_i = 1:Global.NChan
+            CateSignals_PlotAll(...
+                Global.RFmax(:,Channel_i),...
+                Global.RFp50(:,Channel_i),...
+                Global.FileName,SaveFigures,Channel_i,...
+                1);
+        end
+        %%% Generate Report
+        if GenerateReport
+            set(0, 'DefaultFigureVisible', 'off');
+            if strcmp(Report_PDF_HTML,'HTML')
+                report('CateSignals_Report_HTML',['-o',WorkingFolder{Count_Folder},'\CateSignals_Report.html']);
+            elseif strcmp(Report_PDF_HTML,'PDF')
+                report('CateSignals_Report_PDF',['-o',WorkingFolder{Count_Folder},'\CateSignals_Report.pdf']);
+            else
+                warning('El tipo de reporte indicado no es correcto, las opciones son ''HTML'', ''PDF''.');
+            end
+            set(0, 'DefaultFigureVisible', 'on');
+        end
+    else
+        warning([newline,'No file meets the given criteria.',newline])
+    end
+    %%% Return to folder
+    cd(MainFolder)
 end
-%%% -----------------------------------------------------------------------
-PlotCategAllP50Max_v2(Global.RFmax,Global.RFp50,Global.FileName,SaveFigures)
-%%% -----------------------------------------------------------------------
-%%% Generate Report
-cd(CurrentDir)
-MaxZ = 1.5*max(Global.RFmax(:,1));
-set(0, 'DefaultFigureVisible', 'off');
-MyReport = report('myReport');
-web(MyReport)
-set(0, 'DefaultFigureVisible', 'on');
-%%% ***********************************************************************
+end
+%% CreateNewGlobal
+function Global = CreateNewGlobal()
+%
+% Global = CreateNewGlobal()
+%
+% Created By:
+%   Mateo G. H.	(2021/05/25)
+Global.FileName    = cell(0); % Column cell, each row is a file
+Global.RFall       = cell(0); % Matrix cell, each row is a file, each column is a channel
+Global.RFp50       = []; % Matrix, each row is a file, each column is a channel
+Global.RFmax       = []; % Matrix, each row is a file, each column is a channel
+Global.Wndws       = cell(0); % Matrix cell, each row is a file, each column is a channel
+Global.Signal      = cell(0); % Matrix cell, each row is a file, each column is a channel
+Global.DismissByProcessing = []; % Indica si el archivo se ha podido preprocesar.
+end
 %% CleanGlobal
 function Global = CleanGlobal(Global,DismissThisFiles,Criteria)
+%
+% Global = CleanGlobal(Global,DismissThisFiles,Criteria)
+%
+% Created By:
+%   Mateo G. H.	(2021/03/17)
 CleanGlobal_ET = tic;
 %%%
 Global.FileName(DismissThisFiles) = [];
@@ -158,34 +230,53 @@ Global.RFall(DismissThisFiles,:)  = [];
 Global.RFp50(DismissThisFiles,:)  = [];
 Global.RFmax(DismissThisFiles,:)  = [];
 Global.Wndws(DismissThisFiles,:)  = [];
-Global.ResampleSig(DismissThisFiles,:) = [];
+Global.Signal(DismissThisFiles,:) = [];
 [Global.NFiles, Global.NChan]= size(Global.RFp50);
 %%%
 disp(['Files dismissed (',Criteria,'): ',num2str(sum(DismissThisFiles(:)),'%.0f')])
 Text = 'CleanGlobal:'; Text(20) = ' '; disp([Text,num2str(toc(CleanGlobal_ET),'%.3f')])
 end
 %% CateAllFiles
-function CATE = CateAllFiles(FolderDir,Channels,Scale,Fs,Fr,TextFileFormat,SkipFirstRAndLastC,SaveFigures,IncludeInFileName)
+function CATE = CateAllFiles(varargin)
 %
-% READ ALL TXT FILES BY DIRECTORY
+% CateAllFiles
+%
+%   WorkingFolder
+%   Channels
+%   Scale
+%   Fs
+%   TextFileFormat
+%   SaveFigures
+%   IncludeInFileName
+%   SignalProcessing
+%   WaitBar
 %
 % INPUTS:
-% FolderDir = dirección del folder a analizar
+% WorkingFolder = dirección del folder a analizar
 %   Los archiovs txt deben ser matrices donde cada columna representa una dirección.
 %
 % OUTPUTS:
 %
-% %%%%%%%%%%%%%%%%%%
-% %%% Mateo G.H. %%%
-% %%% 2021/03/17 %%%
-% %%%%%%%%%%%%%%%%%%
+% Created By:
+%   Mateo G. H.	(2021/03/17)
+
 %%% -----------------------------------------------------------------------
-cd(FolderDir);
+WorkingFolder = varargin{1};
+Channels = varargin{2};
+Scale = varargin{3};
+Fs = varargin{4};
+TextFileFormat = varargin{5};
+SaveFigures = varargin{6};
+IncludeInFileName = varargin{7};
+SignalProcessing = varargin{8};
+WaitBar = varargin{9};
+%%% -----------------------------------------------------------------------
+cd(WorkingFolder);
 %%% -----------------------------------------------------------------------
 StartTime_ET = tic;
 %%% ---
-FileFormat  = char(['**/*.',TextFileFormat]); %IncludeInFileName 4309
-Files       = dir(FileFormat);
+FileFormat = char(['**/*.',TextFileFormat]);
+Files      = dir(FileFormat);
 %%% Check inclusion in filename
 if ~isempty(IncludeInFileName)
     LengthFileFormat = length(TextFileFormat)+1;
@@ -203,22 +294,35 @@ NumberFiles = length(FileName);
 CATE.Files.Name = FileName;
 CATE.Files.Directory = FileDir;
 %%% ---
+CATE.DismissByProcessing = false(NumberFiles,1);
+%%% ---
 for ii = 1:NumberFiles
     %%% ---
+    if ~isempty(WaitBar)
+        WaitBar = WaitBarFcn(WaitBar.Handle,WaitBar.Tic,WaitBar.CurrFolderDir,WaitBar.NumFolderDir,FileName{ii},ii/NumberFiles);
+    end
+    %%% ---
     StartTime_LD = tic;
-    if SkipFirstRAndLastC==0
-        Data = load([FileDir{ii},'\',FileName{ii}])*Scale;
-    elseif SkipFirstRAndLastC==1
-        Data = readmatrix([FileDir{ii},'\',FileName{ii}])*Scale;
-        %Data = dlmread([FileDir{ii},'\',FileName{ii}])*Scale;
-        %Data(:,end) = []; Data(1,:) = [];
+    Data = readmatrix([FileDir{ii},'\',FileName{ii}])*Scale;
+    try
+        Data = SignalProcessingFcn(Data,...
+            SignalProcessing.trend,...
+            SignalProcessing.ts,...
+            SignalProcessing.ffi,...
+            SignalProcessing.fff,...
+            Fs);
+        if size(Data,1)<Fs*5*60 % Los archivos de menos de 5 min se borran.
+            CATE.DismissByProcessing(ii,1)=1;
+        end
+    catch
+        CATE.DismissByProcessing(ii,1)=1;
     end
     Text = 'LoadData:'; Text(20) = ' '; disp([Text,num2str(toc(StartTime_LD),'%.3f')])
     %%% ---
     for jj = 1:length(Channels)
         try
-            [CATE.Channel{jj}.RF{ii},~,CATE.Channel{jj}.Wndws{ii},CATE.Channel{jj}.ResampleSig{ii}] = ...
-                SignalCateg(Data(:,Channels(jj)),[],Fs,Fr);
+            [CATE.Channel{jj}.RF{ii},~,CATE.Channel{jj}.Wndws{ii},CATE.Channel{jj}.Signal{ii}] = ...
+                getRF(Data(:,Channels(jj)));
             RF.Channel{jj}.Max(ii) = max(CATE.Channel{jj}.RF{ii});
             RF.Channel{jj}.P50(ii) = prctile(CATE.Channel{jj}.RF{ii},50);
         catch ME
@@ -228,17 +332,25 @@ for ii = 1:NumberFiles
             %%%
             CATE.Channel{jj}.RF{ii} = 0;
             CATE.Channel{jj}.Wndws{ii} = 0;
-            CATE.Channel{jj}.ResampleSig{ii} = 0;
+            CATE.Channel{jj}.Signal{ii} = 0;
         end
     end
 end
 %%% -----------------------------------------------------------------------
-PlotCategAllP50Max(RF,FileName,FileDir,Channels,SaveFigures);
+for Channel_i = 1:length(RF.Channel)
+    CateSignals_PlotAll(...
+        RF.Channel{Channel_i}.Max(:),...
+        RF.Channel{Channel_i}.P50(:),...
+        FileName,...
+        SaveFigures,...
+        Channel_i,...
+        1);
+end
 %%% -----------------------------------------------------------------------
 Text = 'Elapse time:'; Text(20) = ' '; disp([Text,num2str(toc(StartTime_ET),'%.3f')])
 end
-%% SignalCateg
-function varargout = SignalCateg(Data,varargin)
+%% getRF
+function varargout = getRF(Data,varargin)
 %
 % Signal categorization
 %
@@ -258,8 +370,6 @@ function varargout = SignalCateg(Data,varargin)
 % INPUTS:
 %   Data: column vector with data to be analyzed in units of (m/s^2).
 %   WindLength: analysis window length as number of points.
-%   Fs: sample frequency.
-%   Fr: resample frequency.
 %
 % OUTPUTS:
 %   RF: range times counts of rainflow analysis.
@@ -267,41 +377,21 @@ function varargout = SignalCateg(Data,varargin)
 %   Wndws: the first and last point of each window.
 %   ResampSig: resample signal.
 %
-% %%%%%%%%%%%%%%%%%%
-% %%% Mateo G.H. %%%
-% %%% 2021/03/11 %%%
-% %%%%%%%%%%%%%%%%%%
-nargoutchk(1,4)
-narginchk(1,4)
+% Created By:
+%   Mateo G. H.	(2021/03/11)
+
+% nargoutchk(1,4)
+% narginchk(1,2)
 %%% ---
 StartTime_SC = tic;
 %%% -----------------------------------------------------------------------
 %%% Number of windows
 %%% -----------------------------------------------------------------------
 [L1,L2] = size(Data);
-WindLength = round(L1/10);
-Fs = [];
-Fr = [];
+WindLength = floor(L1/10);
 if ~isempty(varargin)
-    for ii = 1:length(varargin)
-        if ~isempty(varargin{ii})
-            switch ii
-                case 1
-                    WindLength = varargin{1};
-                case 2
-                    Fs = varargin{2};
-                case 3
-                    Fr = varargin{3};
-            end
-        end
-    end
+    WindLength = varargin{1};
 end
-% Obsoleto:
-% % % if isempty(varargin)
-% % %     WindLength = round(L1/10);
-% % % else
-% % %     WindLength = varargin{1};
-% % % end
 Windows = 1:WindLength:L1;
 if Windows(end)+WindLength*0.5>L1
     Windows(end) = L1;
@@ -347,311 +437,141 @@ if nargout>2
     varargout{3} = Wndws;
 end
 %%% -----------------------------------------------------------------------
-%%% Resampled signal
+%%% Signal
 %%% -----------------------------------------------------------------------
 if nargout>3
-    RS = resample(Data,Fr,Fs);
-    % *** Variable Argument Out ***
-    varargout{4} = RS;
+    varargout{4} = Data;
 end
+
 %%% -----------------------------------------------------------------------
 %%% Elapsed time
 %%% -----------------------------------------------------------------------
-Text = 'SignalCateg:'; Text(20) = ' ';    disp([Text,num2str(toc(StartTime_SC),'%.3f')]);
-Text = 'SignalCateg.RF:'; Text(20) = ' '; disp([Text,num2str(StopTime_SC_RF,'%.3f')]);
-Text = 'SignalCateg.IA:'; Text(20) = ' '; disp([Text,num2str(StopTime_SC_IA,'%.3f')]);
+Text = 'getRF:'; Text(20) = ' ';    disp([Text,num2str(toc(StartTime_SC),'%.3f')]);
+Text = 'getRF.RF:'; Text(20) = ' '; disp([Text,num2str(StopTime_SC_RF,'%.3f')]);
+Text = 'getRF.IA:'; Text(20) = ' '; disp([Text,num2str(StopTime_SC_IA,'%.3f')]);
 end
-%% PlotCateAllP50Max
-function PlotCategAllP50Max(RF,FileName,FileDir,Channels,SaveFigures)
+%% SignalProcessingFcn
+function Data = SignalProcessingFcn(y,trend,ts,ffi,fff,fs)
 %
-% PlotCategAllP50Max
-%
+% Data = SignalProcessingFcn(y,trend,ts,ffi,fff,fs)
 %
 % INPUTS:
-%   Channels: 
-%   SaveFigures:
-%   RF
 %
-% OUTPUTS:
-%   RF: range times counts of rainflow analysis.
-%   IA: arias intensity.
-%   Wndws: the first and last point of each window.
-%   ResampSig: resample signal.
+%   y: señales iniciales (antes de ser procesadas y remuestreadas).
+%   trend: valor lógico (1:true, 0:false) para realizar detrend.
+%   ts: duración del suavizado inicial y final de la señal (eliminar ruido
+%       cuando la excitación es nula).
+%   ffi: frecuencia de corte del filtro pasa alto.
+%   fff: frecuencia de corte del filtro pasa bajo.
+%   fs: frecuencia de muestreo, en caso de ser diferente de 0 y menor a la
+%       del vector ti, se hará remuestreo.
 %
-% %%%%%%%%%%%%%%%%%%
-% %%% Mateo G.H. %%%
-% %%% 2021/03/11 %%%
-% %%%%%%%%%%%%%%%%%%
-GraphProp = GraphicalProperties;
-%%% -----------------------------------------------------------------------
-for jj =1:length(Channels)
-    %%% ---
-    wid  = 17;
-    hei  = 6;
-    Fig  = figure('Units','centimeters','Position',[1 1 wid hei]);
-    Ax1 = axes(Fig); %#ok<LAXES>
-    Pl1(1) = plot(Ax1,RF.Channel{jj}.P50(:),':','Color',[1,0,0]*0.6,'LineWidth',GraphProp.linewidth,...
-        'Marker','d','MarkerSize',6,'MarkerEdgeColor',[1,1,1]*0.3,'MarkerFaceColor',[1,0,0]*0.6); hold on;
-    Pl1(2) = plot(Ax1,RF.Channel{jj}.Max(:),':','Color',[0,0,1]*0.6,'LineWidth',GraphProp.linewidth,...
-        'Marker','o','MarkerSize',5,'MarkerEdgeColor',[1,1,1]*0.8,'MarkerFaceColor',[0,0,1]*0.6);
-    %%% ---
-    Ax1.XLim = [1,max([length(RF.Channel{jj}.P50(:)),1.5])];
-    Ax1.YLim = [0,1.1*max(RF.Channel{jj}.Max(:))];
-    Ax1.Title.String = ['Canal: ',num2str(Channels(jj))];
-    Ax1.YLabel.String = 'RF';
-    Ax1.XLabel.String = 'Registro';
-    %%% ---
-    lgn1 = legend({'P50','Max'},'FontSize',GraphProp.Prop.FontSize-1,'Location','best');
-    set(lgn1.BoxFace, 'ColorType','truecoloralpha', 'ColorData',uint8(255*[1;1;1;.9]));
-    set(Ax1,GraphProp.Prop);
-    set(Ax1.XAxis,GraphProp.PropXA);
-    set(Ax1.YAxis,GraphProp.PropYA);
-    set(Ax1.Title,GraphProp.PropT);
-    set(Ax1.XLabel,GraphProp.PropXL);
-    set(Ax1.YLabel,GraphProp.PropYL);
-    %%% -----------------------------------------------------------------------
-    Lpwd = length(pwd);
-    %%% ---
-    DCursorP50.cursorMode = datacursormode(Fig);
-    set(DCursorP50.cursorMode,'UpdateFcn',{@UpdateDataCursorP50,FileName,FileDir,Lpwd});
-    DCursorP50.hDatatip = DCursorP50.cursorMode.createDatatip(Pl1(1));
-    set(DCursorP50.hDatatip,'Interpreter','none')
-    DCursorP50.hDatatip.Position = [Pl1(1).XData(1),Pl1(1).YData(1),0];
-    DCursorP50.hDatatip.FontSize = GraphProp.fontsize-1;
-    DCursorP50.hDatatip.FontName = GraphProp.fontname;
-    DCursorP50.hDatatip.BackgroundColor = ones(1,3).*0.95;
-    DCursorP50.hDatatip.MarkerEdgeColor = ones(1,3).*0.2;
-    DCursorP50.hDatatip.MarkerFaceColor = [1,1,1]*0.4;
-    DCursorP50.hDatatip.EdgeColor =[1 1 1]*0.2;
-    DCursorP50.hDatatip.Marker = 'o';
-    DCursorP50.hDatatip.MarkerSize = 6;
-    DCursorP50.hDatatip.BackgroundAlpha = 0.8;
-    DCursorP50.hDatatip.Selected  = 'off';
-    DCursorP50.hDatatip.Draggable = 'on';
-    %%% Save Figure
-    if SaveFigures == 1
-        FigureNumber = num2str(get(gcf,'Number'));
-        saveas(gcf,FigureNumber,'svg');
+% Created By:
+%   Mateo G. H. (2021/05/25)
+%
+% Modified BY:
+%   Jose M. A.	(2021/05/24)
+%   Mateo G. H. (2021/05/25)
+
+%%%%%%%%%%%%%%%%%%% -------------------------------------------------------
+%%% Time Vector %%%
+%%%%%%%%%%%%%%%%%%%
+t = round((0:(length(y(:,1))-1))'/fs,10);
+%%%%%%%%%%%%%%% -----------------------------------------------------------
+%%% Detrend %%%
+%%%%%%%%%%%%%%%
+if trend==1
+    y = detrend(y);
+end
+%%%%%%%%%%%%%% ------------------------------------------------------------
+%%% Smooth %%%
+%%%%%%%%%%%%%%
+if ~isempty(ts)
+    if ts>0 && length(t)>fs*ts/2
+        S = ones(length(t),1);
+        S(1:fs*ts/2-1) = (1-cos(2*pi*(1/ts)*t(1:fs*ts/2-1)))/2;
+        S(end-(fs*ts/2-1):end) = (1+cos(2*pi*(1/ts)*t(1:fs*ts/2)))/2;
+        S([1,end]) = [0;0];
+        S = S*ones(size(y(1,:)));
+        y = S.*y;
+    elseif ts>0
+        y([1,end],:) = 0;
     end
 end
+%%%%%%%%%%%%%% ------------------------------------------------------------
+%%% Filter %%%
+%%%%%%%%%%%%%%
+if ffi~=0	%%% High
+    fc      = min([ffi,0.99*fs/2]); % (Hz)
+    [z,p,k] = butter(6,fc/(fs/2),'high');
+    sos     = zp2sos(z,p,k);
+    y       = filtfilt(sos,1,y); % fvtool(sos,'Analysis','freq')
 end
-%%
-%% PlotCategAllP50Max_v2
-function PlotCategAllP50Max_v2(Max,P50,FileName,SaveFigures)
+if fff~=0	%%% Low
+    if fff>0.4*fs
+        fff = min([0.4*fs,fff]); % (Hz)
+        warning('La frecuencia de corte fff se ha modificado: fff=0.4*fs')
+    end
+    fc    = min([fff,0.99*fs/2]); % (Hz)
+    [B,A] = butter(6,fc/(fs/2),'low');
+    y     = filtfilt(B,A,y); % fvtool(B,A)
+end
+Data=y;
+end
+%% WaiBarFcn
+function WaitBar = WaitBarFcn(varargin)
 %
-% PlotCategAllP50Max
-%
+% WaitBar = WaitBarFcn(varargin)
 %
 % INPUTS:
-%   Channels: 
-%   SaveFigures:
-%   RF
+%
+%   WaitBar.Handle
+%   WaitBar.Tic
+%   CurrFolderDir
+%   NumFolderDir
+%   FileName
+%   Progress
 %
 % OUTPUTS:
-%   RF: range times counts of rainflow analysis.
-%   IA: arias intensity.
-%   Wndws: the first and last point of each window.
-%   ResampSig: resample signal.
+%   WaitBar
 %
-% %%%%%%%%%%%%%%%%%%
-% %%% Mateo G.H. %%%
-% %%% 2021/03/11 %%%
-% %%%%%%%%%%%%%%%%%%
-GraphProp = GraphicalProperties;
-Channels = size(P50,2);
+% Created By:
+%   Mateo G. H. (2021/05/25)
+
 %%% -----------------------------------------------------------------------
-for jj =1:Channels
-    %%% ---
-    wid  = 17;
-    hei  = 6;
-    Fig  = figure('Units','centimeters','Position',[1 1 wid hei]);
-    Ax1 = axes(Fig); %#ok<LAXES>
-    Pl1(1) = plot(Ax1,P50(:,jj),':','Color',[1,0,0]*0.6,'LineWidth',GraphProp.linewidth,...
-        'Marker','d','MarkerSize',6,'MarkerEdgeColor',[1,1,1]*0.3,'MarkerFaceColor',[1,0,0]*0.6); hold on;
-    Pl1(2) = plot(Ax1,Max(:,jj),':','Color',[0,0,1]*0.6,'LineWidth',GraphProp.linewidth,...
-        'Marker','o','MarkerSize',5,'MarkerEdgeColor',[1,1,1]*0.8,'MarkerFaceColor',[0,0,1]*0.6);
-    %%% ---
-    Ax1.XLim = [1,max([length(P50(:,jj)),1.5])];
-    Ax1.YLim = [0,1.1*max(Max(:,jj))];
-    Ax1.Title.String = ['Canal: ',num2str(jj)];
-    Ax1.YLabel.String = 'RF';
-    Ax1.XLabel.String = 'Registro';
-    %%% ---
-    lgn1 = legend({'P50','Max'},'FontSize',GraphProp.Prop.FontSize-1,'Location','best');
-    set(lgn1.BoxFace, 'ColorType','truecoloralpha', 'ColorData',uint8(255*[1;1;1;.9]));
-    set(Ax1,GraphProp.Prop);
-    set(Ax1.XAxis,GraphProp.PropXA);
-    set(Ax1.YAxis,GraphProp.PropYA);
-    set(Ax1.Title,GraphProp.PropT);
-    set(Ax1.XLabel,GraphProp.PropXL);
-    set(Ax1.YLabel,GraphProp.PropYL);
-    %%% -----------------------------------------------------------------------
-    Lpwd = length(pwd);
-    %%% ---
-    DCursorP50.cursorMode = datacursormode(Fig);
-    set(DCursorP50.cursorMode,'UpdateFcn',{@UpdateDataCursorP50_v2,FileName,Lpwd});
-    DCursorP50.hDatatip = DCursorP50.cursorMode.createDatatip(Pl1(1));
-    set(DCursorP50.hDatatip,'Interpreter','none')
-    DCursorP50.hDatatip.Position = [Pl1(1).XData(1),Pl1(1).YData(1),0];
-    DCursorP50.hDatatip.FontSize = GraphProp.fontsize-1;
-    DCursorP50.hDatatip.FontName = GraphProp.fontname;
-    DCursorP50.hDatatip.BackgroundColor = ones(1,3).*0.95;
-    DCursorP50.hDatatip.MarkerEdgeColor = ones(1,3).*0.2;
-    DCursorP50.hDatatip.MarkerFaceColor = [1,1,1]*0.4;
-    DCursorP50.hDatatip.EdgeColor =[1 1 1]*0.2;
-    DCursorP50.hDatatip.Marker = 'o';
-    DCursorP50.hDatatip.MarkerSize = 6;
-    DCursorP50.hDatatip.BackgroundAlpha = 0.8;
-    DCursorP50.hDatatip.Selected  = 'off';
-    DCursorP50.hDatatip.Draggable = 'on';
-    %%% Save Figure
-    if SaveFigures == 1
-        FigureNumber = num2str(get(gcf,'Number'));
-        saveas(gcf,FigureNumber,'svg');
+if nargin >1
+    WaitBar.Handle = varargin{1};
+    WaitBar.Tic = varargin{2};
+    WaitBar.CurrFolderDir = varargin{3};
+    WaitBar.NumFolderDir = varargin{4};
+    FileName = varargin{5};
+    Progress = varargin{6};
+    MSG = ['Folder: ',num2str(WaitBar.CurrFolderDir,'%.0f'),'/',num2str(WaitBar.NumFolderDir,'%.0f'),', '];
+    MSG = [MSG,'File: ',FileName];
+    MSG = char([MSG,', Elapsed time (s): ',num2str(toc(WaitBar.Tic),'%.0f')]);
+    WaitBar.Handle = waitbar(Progress,WaitBar.Handle,MSG);
+else
+    MSG = 'Please wait...';
+    WaitBar.Handle = waitbar(0,MSG);
+    WaitBar.Tic = tic;
+    %%% Handle properties -------------------------------------------------
+    GraphProp = GraphicalProperties;
+    h = findall(WaitBar.Handle);
+    for ii = 1:length(h)
+        try
+            set(h(ii),'Units','n')
+        catch
+        end
     end
+    WaitBar.Handle.Units = 'centimeters';
+    WaitBar.Handle.Position(3) = 15;
+    WaitBar.Handle.Children.Title.Interpreter = 'none';
+    set(WaitBar.Handle.Children,GraphProp.Prop);
+    set(WaitBar.Handle.Children.XAxis,GraphProp.PropXA);
+    set(WaitBar.Handle.Children.YAxis,GraphProp.PropYA);
+    set(WaitBar.Handle.Children.Title,GraphProp.PropT);
+    set(WaitBar.Handle.Children.XLabel,GraphProp.PropXL);
+    set(WaitBar.Handle.Children.YLabel,GraphProp.PropYL);
 end
-end
-%% PlotSignalCateg
-% function PlotCategSignal(Data,varargin)
-% %
-% % PlotSignalCateg(Data,Case)
-% %
-% % INPUTS:
-% %   Data: structure obtained from SignalCateg plot.
-% %   Case: analysis window length as number of points.
-% %
-% % OUTPUTS:
-% %
-% % %%%%%%%%%%%%%%%%%%
-% % %%% Mateo G.H. %%%
-% % %%% 2021/03/15 %%%
-% % %%%%%%%%%%%%%%%%%%
-% nargoutchk(0,0)
-% narginchk(1,3)
-% %%% -----------------------------------------------------------------------
-% %%% Propiedades gráfias
-% %%% -----------------------------------------------------------------------
-% fontname            = 'Calibri Light';
-% fontsize            = 11;
-% linewidth           = 1.2;
-% Prop.FontName       = fontname;
-% Prop.FontSize       = fontsize;
-% PropYL.FontName     = fontname;
-% PropYL.FontSize     = fontsize;
-% PropXL.FontName     = fontname;
-% PropXL.FontSize     = fontsize;
-% Prop.GridColor      = [1 1 1]*0.6;
-% Prop.MinorGridColor = [1 1 1]*0.6;
-% Prop.XMinorGrid     = 'on';
-% Prop.YMinorGrid     = 'on';
-% Prop.XGrid          = 'on';
-% Prop.YGrid          = 'on';
-% Prop.Box            = 'on';
-% PropYA.Color        = [1 1 1]*0;
-% PropXA.Color        = [1 1 1]*0;
-% PropT.FontName      = fontname;
-% PropT.FontSize      = fontsize;
-% %%% -----------------------------------------------------------------------
-% if isempty(varargin)
-%     varargin{1} = 'RF';
-% end
-% for ii = 1:length(varargin)
-%     Case = varargin{ii};
-%     switch Case
-%         case 'RF'
-%             ZData = Data.RF;
-%         case 'IA'
-%             ZData = Data.IA;
-%     end
-%     wid  = 17;
-%     hei  = 12;
-%     Fig  = figure('Units','centimeters','Position',[1 1 wid hei]);
-%     Ax1  = axes(Fig); %#ok<LAXES>
-%     YData = seconds([Data.Wndws(1,:),Data.Wndws(end)]/Data.fs); YData.Format = 'mm:ss';
-%     BarDataLim = [0,0.8]*max(ZData(:));
-%     Pl1  = bar3(ZData,0.95);
-%     N    = length(Pl1);
-%     set(Ax1,GraphProp.Prop);
-%     set(Ax1.XAxis,GraphProp.PropXA);
-%     set(Ax1.YAxis,GraphProp.PropYA);
-%     set(Ax1.Title,GraphProp.PropT);
-%     set(Ax1.XLabel,GraphProp.PropXL);
-%     set(Ax1.YLabel,GraphProp.PropYL);
-%     Ax1.Title.String  = '';
-%     Ax1.YLabel.String = '';
-%     Ax1.YLabel.String = 'Tiempo (mm:ss)';
-%     Ax1.XLabel.String = 'Registro';
-%     Ax1.YTick = 0.5:Ax1.YTick(end)+0.5;
-%     Ax1.YTickLabel = cellstr(YData);
-%     Ax1.XTick = 1:N;
-%     %%% ---
-%     Ax1.XLim = [0.5,size(ZData,2)+0.5];
-%     Ax1.YLim = [0.5,size(ZData,1)+0.5];
-%     %%% -----------------------------------------------------------------------
-%     Clrs = colormap(Ax1, 'gray');
-%     colormap(Ax1, Clrs(end:-1:1,:));
-%     Clb = colorbar;
-%     caxis(BarDataLim);
-%     for kk = 1:N
-%         Pl1(kk).CData     = Pl1(kk).ZData;
-%         Pl1(kk).FaceColor = 'interp';
-%         Pl1(kk).EdgeColor = [1,1,1]*0.7;
-%         Pl1(kk).LineWidth = linewidth;
-%     end
-%     view(-90,90)
-%     %%% ---
-%     Clb.Location       = 'northoutside';
-%     Clb.Label.String   = Case;
-%     Clb.Label.FontSize = fontsize;
-% end
-% end
-%% UpdateDataCursorP50
-function Text = UpdateDataCursorP50(~,DCursor,FileName,FileDir,Lpwd)
-x = DCursor.Position(1);
-FileDir  = FileDir{x};
-FileName = FileName{x};
-if length(FileDir)>Lpwd
-    Text = ['.',FileDir(Lpwd+1:end),'\',FileName];
-else
-    Text = [num2str(x),': ',FileName];
-end
-end
-%% UpdateDataCursorP50_v2
-function Text = UpdateDataCursorP50_v2(~,DCursor,FileName,Lpwd)
-x = DCursor.Position(1);
-FileName = FileName{x};
-if length(FileName)>Lpwd
-    Text = [num2str(x),': ','.',FileName(Lpwd+1:end)];
-else
-    Text = [num2str(x),': ',FileName];
-end
-end
-%% GraphicalProperties
-function GraphProp = GraphicalProperties
-GraphProp.fontname            = 'Calibri Light';
-GraphProp.fontsize            = 11;
-GraphProp.linewidth           = 1.2;
-GraphProp.Prop.FontName       = GraphProp.fontname;
-GraphProp.Prop.FontSize       = GraphProp.fontsize;
-GraphProp.PropYL.FontName     = GraphProp.fontname;
-GraphProp.PropYL.FontSize     = GraphProp.fontsize;
-GraphProp.PropXL.FontName     = GraphProp.fontname;
-GraphProp.PropXL.FontSize     = GraphProp.fontsize;
-GraphProp.Prop.GridColor      = [1 1 1]*0.6;
-GraphProp.Prop.MinorGridColor = [1 1 1]*0.6;
-GraphProp.Prop.XMinorGrid     = 'on';
-GraphProp.Prop.YMinorGrid     = 'on';
-GraphProp.Prop.XGrid          = 'on';
-GraphProp.Prop.YGrid          = 'on';
-GraphProp.Prop.Box            = 'on';
-GraphProp.PropYA.Color        = [1 1 1]*0;
-GraphProp.PropXA.Color        = [1 1 1]*0;
-GraphProp.PropT.FontName      = GraphProp.fontname;
-GraphProp.PropT.FontSize      = GraphProp.fontsize;
-% set(Ax1,GraphProp.Prop);
-% set(Ax1.XAxis,GraphProp.PropXA);
-% set(Ax1.YAxis,GraphProp.PropYA);
-% set(Ax1.Title,GraphProp.PropT);
-% set(Ax1.XLabel,GraphProp.PropXL);
-% set(Ax1.YLabel,GraphProp.PropYL);
+%%% -----------------------------------------------------------------------
 end
