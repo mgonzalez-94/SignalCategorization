@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<stylesheet_registry xmlns:fo="http://www.w3.org/1999/XSL/Format" xmlns:xsl="http://www.w3.org/1999/XSL/Transform" version="2.0">
+   <stylesheet id="CateSignals_ReportFormat" transformtype="fo"><!--24-may-2021 16:32:30-->
+      <name>San-Serif</name>
+      <description>Custom Formatting Object style sheet for PDF transforms</description>
+      <filename>$matlabroot/sys/namespace/docbook/v4/xsl/fo/docbook_rptgen.xsl</filename>
+      <xsl_code>
+         <xsl:param name="body.font.family">sans-serif</xsl:param>
+         <xsl:param name="dingbat.font.family">sans-serif</xsl:param>
+         <xsl:variable name="show.comments">0</xsl:variable>
+      </xsl_code>
+   </stylesheet>
+</stylesheet_registry>
