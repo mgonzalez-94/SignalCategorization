@@ -15,6 +15,7 @@ function CateSignals(varargin)
 % Modified By:
 %   Jose M. A.	(2021/05/24)
 %   Mateo G. H. (2021/05/26)
+%   Mateo G. H. (2021/06/15)
 global WorkingFolder Count_Folder CateSignals_Results Signals
 %%%%%%%%%%%%%%%%%%%%% -----------------------------------------------------
 %%% Assign Inputs %%%
@@ -173,8 +174,9 @@ for Count_Folder = 1:NumFolderDir
             CateSignals_Results = rmfield(Global,'Signal');
             Signals = Global.Signal;
         catch
+            CateSignals_Results = Global;
         end
-        save('CateSignals_Results.mat','Global')
+        save('CateSignals_Results.mat','CateSignals_Results')
         for Channel_i = 1:Global.NChan
             CateSignals_PlotAll(...
                 Global.RFmax(:,Channel_i),...
