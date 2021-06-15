@@ -1,8 +1,13 @@
 %%% -----------------------------------------------------------------------
 clc, clearvars, close all force;
 global WorkingFolder Count_Folder CateSignals_Results Signals %#ok<NUSED>
-addpath('C:\Users\Usuario\Documents\Matlab_Repository')
-addpath('C:\Users\Usuario\Documents\Matlab_Repository\CateSignals')
+%%%%%%%%%%%%%%%%%% --------------------------------------------------------
+%%% Repository %%%
+%%%%%%%%%%%%%%%%%%
+warning('off')
+addpath('C:\Users\Mateo\Google Drive\01 Trabajo\GIT\CateSignals')
+addpath('C:\Users\Usuario\Google Drive\01 Trabajo\GIT\CateSignals')
+warning('on')
 %%%%%%%%%%%%%%%%%%%%% -----------------------------------------------------
 %%% Assign Inputs %%%
 %%%%%%%%%%%%%%%%%%%%%
