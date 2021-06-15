@@ -6,7 +6,9 @@ global WorkingFolder Count_Folder CateSignals_Results Signals %#ok<NUSED>
 %%%%%%%%%%%%%%%%%%
 warning('off')
 addpath('C:\Users\Mateo\Google Drive\01 Trabajo\GIT\CateSignals')
+addpath('C:\Users\Mateo\Google Drive\01 Trabajo\GIT')
 addpath('C:\Users\Usuario\Google Drive\01 Trabajo\GIT\CateSignals')
+addpath('C:\Users\Usuario\Google Drive\01 Trabajo\GIT')
 warning('on')
 %%%%%%%%%%%%%%%%%%%%% -----------------------------------------------------
 %%% Assign Inputs %%%
